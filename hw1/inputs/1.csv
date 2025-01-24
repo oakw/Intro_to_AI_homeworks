@@ -1,0 +1,10 @@
+0 # Starting X - horizontal value from left - zero based
+0 # Starting Y - vertical value from top  - zero based
+50 # Starting Battery
+1 # Movement Cost
+5 # Vaccuming Cost
+0, 0, 0, 9001, 9001
+0, 10, 20, 9001, 9001
+9001, 9001, 50, 9001, 9001
+9001, 30, 40, 9001, 9001
+0, 0, 50, 0, 9000
