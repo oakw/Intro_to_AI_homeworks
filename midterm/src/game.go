@@ -10,8 +10,9 @@ import (
 )
 
 type Game struct {
-	board *Board
-	ai    *AI
+	board  *Board
+	ai     *AI
+	winner int
 }
 
 func NewGame() *Game {
@@ -22,11 +23,6 @@ func NewGame() *Game {
 }
 
 func (g *Game) Update() error {
-	if g.board.gameOver {
-		os.Exit(0)
-		return nil
-	}
-
 	// Handle mouse click
 	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
 		x, y := ebiten.CursorPosition()
@@ -34,15 +30,19 @@ func (g *Game) Update() error {
 		if g.board.MakeMove(row, col, Player) {
 			if g.board.CheckWin(Player) {
 				g.board.gameOver = true
+				g.winner = Player
 			} else {
-				// AI move
+
 				startTime := time.Now()
-				_, bestMove := g.ai.Minimax(g.board, 3, -9999, 9999, true)
+				bestMove := g.ai.NextMove(g.board, 3, -9999, 9999, true)
 				elapsedTime := time.Since(startTime).Seconds()
-				fmt.Printf("AI move: %d, %d, Elapsed time: %f\n", bestMove.Row, bestMove.Col, elapsedTime)
+				fmt.Printf("AI made move: %d, %d, Elapsed time: %f\n", bestMove.Row, bestMove.Col, elapsedTime)
+
 				g.board.MakeMove(bestMove.Row, bestMove.Col, AIPlayer)
 				if g.board.CheckWin(AIPlayer) {
 					g.board.gameOver = true
+					// Print the winner on the screen
+					g.winner = AIPlayer
 				}
 			}
 		}
@@ -52,6 +52,20 @@ func (g *Game) Update() error {
 
 func (g *Game) Draw(screen *ebiten.Image) {
 	g.board.Draw(screen)
+
+	if g.board.gameOver {
+		msg := "Player wins!"
+		if g.winner == AIPlayer {
+			msg = "AI wins!"
+		}
+		fmt.Println(msg)
+		// wait until the user closes the window
+		for !inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
+
+		}
+
+		os.Exit(0)
+	}
 }
 
 func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {

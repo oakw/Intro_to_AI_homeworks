@@ -1,7 +1,27 @@
 package main
 
+const (
+	fourInARow  = 100 // Winning condition
+	threeInARow = 50  // Winning condition
+	twoInARow   = 10
+	oneInARow   = 1
+	// centerBonus = 3 // Bonus for controlling center
+)
+
 type Move struct {
 	Row, Col int
+}
+
+func GenerateMoves(board *Board, player int) []Move {
+	moves := []Move{}
+	for i := 0; i < Size; i++ {
+		for j := 0; j < Size; j++ {
+			if board.grid[i][j] == Empty {
+				moves = append(moves, Move{i, j})
+			}
+		}
+	}
+	return moves
 }
 
 func CheckWinCondition(grid [Size][Size]int, player int) bool {
