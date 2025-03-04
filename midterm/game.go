@@ -6,7 +6,7 @@ import (
 )
 
 const (
-	Size   = 16 // Board size (5x5 for simplicity)
+	Size   = 16 // Board size
 	Empty  = 0 // Empty cell
 	Player = 1 // Human player
 	AI     = 2 // AI player
