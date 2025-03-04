@@ -5,10 +5,14 @@ import (
 	"math"
 	"math/rand"
 	"sort"
+	"time"
 )
+
+const MAX_MINIMAX_EXECUTION_SECONDS = 2
 
 type AI struct {
 	moveCount int
+	lastMinimaxExecutionStartTime time.Time
 }
 
 func NewAI() *AI {
@@ -24,35 +28,66 @@ func (ai *AI) NextMove(board *Board, depth int, alpha, beta float64, isMaximizin
 		return possibleMoves[rand.Intn(len(possibleMoves))]
 	}
 
-	threats, _ := board.evaluatePossibleThreatsAndFavors()
+	threats, favors := board.evaluatePossibleThreatsAndFavors()
 
-	possibleThreatMoves := possibleMoves
-	// possibleFavorableMoves := possibleMoves
+	possibleThreatMoves := make([]Move, len(possibleMoves))
+	possibleFavorableMoves := make([]Move, len(possibleMoves))
+	copy(possibleThreatMoves, possibleMoves)
+	copy(possibleFavorableMoves, possibleMoves)
+	fmt.Println("")
 
 	sort.Slice(possibleThreatMoves, func(i, j int) bool {
 		return threats[possibleThreatMoves[i]] > threats[possibleThreatMoves[j]]
 	})
 
-	// sort.Slice(possibleFavorableMoves, func(i, j int) bool {
-	// 	return favors[possibleFavorableMoves[i]] > favors[possibleFavorableMoves[j]]
-	// })
+	sort.Slice(possibleFavorableMoves, func(i, j int) bool {
+		return favors[possibleFavorableMoves[i]] > favors[possibleFavorableMoves[j]]
+	})
 
-	if len(possibleThreatMoves) > 0 && threats[possibleThreatMoves[0]] >= threeInARow {
-		fmt.Println("Threat from opponent detected", possibleThreatMoves[0])
-		return possibleThreatMoves[0]
+	type PossibleMove struct {
+		move Move
+		score int
+	}
+	
+	movesFromEachType := []PossibleMove{}
+	
+	fmt.Println("Top threat move", possibleThreatMoves[0], "score", threats[possibleThreatMoves[0]])
+	fmt.Println("Top favorable move", possibleFavorableMoves[0], "score", favors[possibleFavorableMoves[0]])
+
+	if len(possibleFavorableMoves) > 0 {
+		movesFromEachType = append(movesFromEachType, PossibleMove{move: possibleFavorableMoves[0], score: favors[possibleFavorableMoves[0]] + 1})
+
+		if favors[possibleFavorableMoves[0]] >= fourInARow {
+			fmt.Println("Did favorable move", possibleFavorableMoves[0], "score", favors[possibleFavorableMoves[0]])
+			return possibleFavorableMoves[0]
+		}
 	}
 
-	// if len(possibleFavorableMoves) > 0 && favors[possibleFavorableMoves[0]] >= fourInARow {
-	// 	fmt.Println("Favorable move detected", possibleFavorableMoves[0])
-	// 	return possibleFavorableMoves[0]
-	// }
+	if len(possibleThreatMoves) > 0 {
+		movesFromEachType = append(movesFromEachType, PossibleMove{move: possibleThreatMoves[0], score: threats[possibleThreatMoves[0]]})
+
+		if threats[possibleThreatMoves[0]] >= fourInARow {
+			fmt.Println("Reverse threat move", possibleThreatMoves[0], "score", threats[possibleThreatMoves[0]])
+			return possibleThreatMoves[0]
+		}
+	}
 
 	newBoard := board.Copy()
+	ai.lastMinimaxExecutionStartTime = time.Now()
 	rootNode := MinimaxNode{board: *newBoard, lastMove: board.moves[len(board.moves)-1], nextMove: Move{-1, -1}, currentTurn: AIPlayer}
 	score := ai.minimax(&rootNode, depth, alpha, beta)
-	fmt.Println("Score", score)
+	movesFromEachType = append(movesFromEachType, PossibleMove{move: rootNode.nextMove, score: int(score) + 1})
+	fmt.Println("Minimax move", rootNode.nextMove, "score", score)
 
-	return rootNode.nextMove
+	sort.Slice(movesFromEachType, func(i, j int) bool {
+		return movesFromEachType[i].score > movesFromEachType[j].score
+	})
+
+	if movesFromEachType[0].score < twoInARow && len(possibleFavorableMoves) > 0 {
+		return possibleFavorableMoves[0]
+	}
+
+	return movesFromEachType[0].move
 }
 
 type MinimaxNode struct {
@@ -79,7 +114,7 @@ func (node *MinimaxNode) generateChildNodes() []MinimaxNode {
 }
 
 func (ai *AI) minimax(node *MinimaxNode, depth int, alpha, beta float64) float64 {
-	if depth == 0 || node.board.CheckWin(AIPlayer) || node.board.CheckWin(Player) {
+	if depth == 0 || node.board.CheckWin(AIPlayer) || node.board.CheckWin(Player) || time.Since(ai.lastMinimaxExecutionStartTime).Seconds() > MAX_MINIMAX_EXECUTION_SECONDS {
 		return float64(node.board.evaluate())
 	}
 
@@ -89,7 +124,7 @@ func (ai *AI) minimax(node *MinimaxNode, depth int, alpha, beta float64) float64
 			eval := ai.minimax(&childNode, depth-1, alpha, beta)
 			if eval > maxEval {
 				maxEval = eval
-				node.nextMove = childNode.lastMove
+				node.nextMove = Move{Row: childNode.lastMove.Row, Col: childNode.lastMove.Col}
 			}
 			alpha = math.Max(alpha, eval)
 			if beta <= alpha {
@@ -103,7 +138,7 @@ func (ai *AI) minimax(node *MinimaxNode, depth int, alpha, beta float64) float64
 			eval := ai.minimax(&childNode, depth-1, alpha, beta)
 			if eval < minEval {
 				minEval = eval
-				node.nextMove = childNode.lastMove
+				node.nextMove = Move{Row: childNode.lastMove.Row, Col: childNode.lastMove.Col}
 			}
 			beta = math.Min(beta, eval)
 			if beta <= alpha {

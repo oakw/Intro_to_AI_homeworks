@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	Size     = 16 // Board size (5x5)
+	Size     = 16 // TODO: Make dynamic
 	WinLen   = 5
 	Cell     = 32 // Cell size in pixels
 	Empty    = 0
@@ -96,87 +96,180 @@ func (b *Board) evaluatePossibleThreatsAndFavors() (map[Move]int, map[Move]int) 
 	return threats, favorableMoves
 }
 
+func getValueScore(consecutiveCount int, isOpen bool) int {
+	if !isOpen && consecutiveCount < WinLen {
+		// If the sequence is blocked and not already a win, reduce its value
+		return getValueScore(consecutiveCount-1, true)
+	}
+
+	if consecutiveCount == 2 {
+		return oneInARow
+	} else if consecutiveCount == 3 {
+		return twoInARow
+	} else if consecutiveCount == 4 {
+		return threeInARow
+	} else if consecutiveCount >= 5 {
+		return fourInARow
+	}
+
+	return 0
+}
+
 func (b *Board) getThreatAndFavorScores() (int, int) {
 	threatScore := 0
 	favorableScore := 0
 
-	getValueScore := func(consecutiveCount int) int {
-		if consecutiveCount == 2 {
-			return oneInARow
-		} else if consecutiveCount == 3 {
-			return twoInARow
-		} else if consecutiveCount == 4 {
-			return threeInARow
-		} else if consecutiveCount >= 5 {
-			return fourInARow
+	// Check if a sequence can be potentially extended to reach WinLen
+	isOpenSequence := func(row, col, dRow, dCol, player, count int) bool {
+		// If already winning length, it doesn't matter if it's open
+		if count >= WinLen {
+			return true
 		}
 
-		return 0
+		// Check if there's space to extend before the sequence
+		startRow, startCol := row-dRow, col-dCol
+		hasSpaceBefore := startRow >= 0 && startRow < Size && startCol >= 0 && startCol < Size &&
+			(b.grid[startRow][startCol] == Empty || b.grid[startRow][startCol] == player)
+
+		// Check if there's space to extend after the sequence
+		endRow, endCol := row+count*dRow, col+count*dCol
+		hasSpaceAfter := endRow >= 0 && endRow < Size && endCol >= 0 && endCol < Size &&
+			(b.grid[endRow][endCol] == Empty || b.grid[endRow][endCol] == player)
+
+		// A sequence is open if it can be extended on at least one side
+		return hasSpaceBefore || hasSpaceAfter
 	}
 
-	getConsecutiveCounts := func(row int, col int, consecutivePlayerCount int, consecutiveAICount int) (int, int) {
-		if b.grid[row][col] == Player {
-			consecutivePlayerCount += 1
-			consecutiveAICount = 0
-
-		} else if b.grid[row][col] == AIPlayer {
-			consecutiveAICount += 1
-			consecutivePlayerCount = 0
-
-		} else {
-			consecutivePlayerCount = 0
-			consecutiveAICount = 0
-		}
-
-		return consecutivePlayerCount, consecutiveAICount
-	}
-
-	consecutivePlayerCount := 0
-	consecutiveAICount := 0
+	// Check horizontals (rows)
 	for row := 0; row < Size; row++ {
-		for col := 0; col < Size; col++ {
-			consecutivePlayerCount, consecutiveAICount = getConsecutiveCounts(row, col, consecutivePlayerCount, consecutiveAICount)
-			threatScore += getValueScore(consecutivePlayerCount)
-			favorableScore += getValueScore(consecutiveAICount)
-		}
-	}
+		col := 0
+		for col < Size {
+			if b.grid[row][col] == Empty {
+				col++
+				continue
+			}
 
-	consecutivePlayerCount = 0
-	consecutiveAICount = 0
-	for col := 0; col < Size; col++ {
-		for row := 0; row < Size; row++ {
-			consecutivePlayerCount, consecutiveAICount = getConsecutiveCounts(row, col, consecutivePlayerCount, consecutiveAICount)
-			threatScore += getValueScore(consecutivePlayerCount)
-			favorableScore += getValueScore(consecutiveAICount)
-		}
-	}
+			player := b.grid[row][col]
+			startCol := col
+			count := 0
 
-	// Check diagonal via diagonal traversal
-	for i := 0; i < 2*Size-1; i++ {
-		consecutiveAICount = 0
-		consecutivePlayerCount = 0
-		for j := 0; j <= i; j++ {
-			row := i - j
-			col := j
-			if row >= 0 && row < Size && col >= 0 && col < Size {
-				consecutivePlayerCount, consecutiveAICount = getConsecutiveCounts(row, col, consecutivePlayerCount, consecutiveAICount)
-				threatScore += getValueScore(consecutivePlayerCount)
-				favorableScore += getValueScore(consecutiveAICount)
+			// Count consecutive pieces
+			for col < Size && b.grid[row][col] == player {
+				count++
+				col++
+			}
+
+			// Check if this sequence can be extended
+			isOpen := isOpenSequence(row, startCol, 0, 1, player, count)
+
+			if player == Player {
+				threatScore = max(threatScore, getValueScore(count, isOpen))
+			} else if player == AIPlayer {
+				favorableScore = max(favorableScore, getValueScore(count, isOpen))
 			}
 		}
 	}
 
-	// Check the other diagonal
-	for i := 0; i < 2*Size-1; i++ {
-		consecutiveAICount = 0
-		consecutivePlayerCount = 0
-		for j := 0; j <= i; j++ {
-			row := i - j
-			col := Size - 1 - j
-			if row >= 0 && row < Size && col >= 0 && col < Size {
-				consecutivePlayerCount, consecutiveAICount = getConsecutiveCounts(row, col, consecutivePlayerCount, consecutiveAICount)
-				threatScore += getValueScore(consecutivePlayerCount)
-				favorableScore += getValueScore(consecutiveAICount)
+	// Check verticals (columns)
+	for col := 0; col < Size; col++ {
+		row := 0
+		for row < Size {
+			if b.grid[row][col] == Empty {
+				row++
+				continue
+			}
+
+			player := b.grid[row][col]
+			startRow := row
+			count := 0
+
+			// Count consecutive pieces
+			for row < Size && b.grid[row][col] == player {
+				count++
+				row++
+			}
+
+			// Check if this sequence can be extended
+			isOpen := isOpenSequence(startRow, col, 1, 0, player, count)
+
+			if player == Player {
+				threatScore = max(threatScore, getValueScore(count, isOpen))
+			} else if player == AIPlayer {
+				favorableScore = max(favorableScore, getValueScore(count, isOpen))
+			}
+		}
+	}
+
+	// Check diagonals (top-left to bottom-right)
+	for startRow := 0; startRow < Size; startRow++ {
+		for startCol := 0; startCol < Size; startCol++ {
+			row, col := startRow, startCol
+
+			// Skip if out of bounds
+			if row >= Size || col >= Size {
+				continue
+			}
+
+			if b.grid[row][col] == Empty {
+				continue
+			}
+
+			player := b.grid[row][col]
+			count := 0
+
+			// Count consecutive pieces
+			for row < Size && col < Size && b.grid[row][col] == player {
+				count++
+				row++
+				col++
+			}
+
+			// Only evaluate if we have at least 2 consecutive pieces
+			if count >= 2 {
+				isOpen := isOpenSequence(startRow, startCol, 1, 1, player, count)
+
+				if player == Player {
+					threatScore = max(threatScore, getValueScore(count, isOpen))
+				} else if player == AIPlayer {
+					favorableScore = max(favorableScore, getValueScore(count, isOpen))
+				}
+			}
+		}
+	}
+
+	// Check diagonals (top-right to bottom-left)
+	for startRow := 0; startRow < Size; startRow++ {
+		for startCol := Size - 1; startCol >= 0; startCol-- {
+			row, col := startRow, startCol
+
+			// Skip if out of bounds
+			if row >= Size || col < 0 {
+				continue
+			}
+
+			if b.grid[row][col] == Empty {
+				continue
+			}
+
+			player := b.grid[row][col]
+			count := 0
+
+			// Count consecutive pieces
+			for row < Size && col >= 0 && b.grid[row][col] == player {
+				count++
+				row++
+				col--
+			}
+
+			// Only evaluate if we have at least 2 consecutive pieces
+			if count >= 2 {
+				isOpen := isOpenSequence(startRow, startCol, 1, -1, player, count)
+
+				if player == Player {
+					threatScore = max(threatScore, getValueScore(count, isOpen))
+				} else if player == AIPlayer {
+					favorableScore = max(favorableScore, getValueScore(count, isOpen))
+				}
 			}
 		}
 	}
