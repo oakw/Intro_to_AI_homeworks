@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"math"
-	"math/rand"
 	"sort"
 	"time"
 )
@@ -11,7 +10,7 @@ import (
 const MAX_MINIMAX_EXECUTION_SECONDS = 2
 
 type AI struct {
-	moveCount int
+	moveCount                     int
 	lastMinimaxExecutionStartTime time.Time
 }
 
@@ -23,9 +22,9 @@ func (ai *AI) NextMove(board *Board, depth int, alpha, beta float64, isMaximizin
 	ai.moveCount += 1
 	possibleMoves := GenerateMoves(board, AIPlayer)
 
-	if ai.moveCount == 1 {
+	if ai.moveCount == 1 || len(board.moves) == 0 {
 		// First move, play anywhere
-		return possibleMoves[rand.Intn(len(possibleMoves))]
+		return possibleMoves[0]
 	}
 
 	threats, favors := board.evaluatePossibleThreatsAndFavors()
@@ -45,19 +44,19 @@ func (ai *AI) NextMove(board *Board, depth int, alpha, beta float64, isMaximizin
 	})
 
 	type PossibleMove struct {
-		move Move
+		move  Move
 		score int
 	}
-	
+
 	movesFromEachType := []PossibleMove{}
-	
+
 	fmt.Println("Top threat move", possibleThreatMoves[0], "score", threats[possibleThreatMoves[0]])
 	fmt.Println("Top favorable move", possibleFavorableMoves[0], "score", favors[possibleFavorableMoves[0]])
 
 	if len(possibleFavorableMoves) > 0 {
 		movesFromEachType = append(movesFromEachType, PossibleMove{move: possibleFavorableMoves[0], score: favors[possibleFavorableMoves[0]] + 1})
 
-		if favors[possibleFavorableMoves[0]] >= fourInARow {
+		if favors[possibleFavorableMoves[0]] >= fiveInARow {
 			fmt.Println("Did favorable move", possibleFavorableMoves[0], "score", favors[possibleFavorableMoves[0]])
 			return possibleFavorableMoves[0]
 		}
@@ -66,7 +65,7 @@ func (ai *AI) NextMove(board *Board, depth int, alpha, beta float64, isMaximizin
 	if len(possibleThreatMoves) > 0 {
 		movesFromEachType = append(movesFromEachType, PossibleMove{move: possibleThreatMoves[0], score: threats[possibleThreatMoves[0]]})
 
-		if threats[possibleThreatMoves[0]] >= fourInARow {
+		if threats[possibleThreatMoves[0]] >= fiveInARow {
 			fmt.Println("Reverse threat move", possibleThreatMoves[0], "score", threats[possibleThreatMoves[0]])
 			return possibleThreatMoves[0]
 		}
@@ -83,7 +82,7 @@ func (ai *AI) NextMove(board *Board, depth int, alpha, beta float64, isMaximizin
 		return movesFromEachType[i].score > movesFromEachType[j].score
 	})
 
-	if movesFromEachType[0].score < twoInARow && len(possibleFavorableMoves) > 0 {
+	if movesFromEachType[0].score < threeInARow && len(possibleFavorableMoves) > 0 {
 		return possibleFavorableMoves[0]
 	}
 
