@@ -1,10 +1,10 @@
 package main
 
 const (
-	fourInARow  = 100 // Winning condition
-	threeInARow = 50 
-	twoInARow   = 10
-	oneInARow   = 1
+	fiveInARow  = 100 // Winning condition
+	fourInARow  = 50
+	threeInARow = 10
+	twoInARow   = 1
 )
 
 type Move struct {
@@ -25,37 +25,37 @@ func GenerateMoves(board *Board, player int) []Move {
 
 	// From center outwards
 	center := Size / 2
-	
+
 	// Add center position first if empty
 	if board.grid[center][center] == Empty {
 		moves = append(moves, Move{center, center})
 	}
-	
+
 	// For each radius from the center
 	for offset := 1; offset <= center; offset++ {
 		// Top and bottom rows of the current square
-		for col := center - offset; col <= center + offset; col++ {
+		for col := center - offset; col <= center+offset; col++ {
 			// Top row
 			row := center - offset
 			if row >= 0 && col >= 0 && col < Size && board.grid[row][col] == Empty {
 				moves = append(moves, Move{row, col})
 			}
-			
+
 			// Bottom row
 			row = center + offset
 			if row < Size && col >= 0 && col < Size && board.grid[row][col] == Empty {
 				moves = append(moves, Move{row, col})
 			}
 		}
-		
+
 		// Left and right columns of the current square (excluding corners already added)
-		for row := center - offset + 1; row <= center + offset - 1; row++ {
+		for row := center - offset + 1; row <= center+offset-1; row++ {
 			// Left column
 			col := center - offset
 			if row >= 0 && row < Size && col >= 0 && board.grid[row][col] == Empty {
 				moves = append(moves, Move{row, col})
 			}
-			
+
 			// Right column
 			col = center + offset
 			if row >= 0 && row < Size && col < Size && board.grid[row][col] == Empty {
@@ -63,7 +63,7 @@ func GenerateMoves(board *Board, player int) []Move {
 			}
 		}
 	}
-	
+
 	return moves
 }
 

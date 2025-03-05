@@ -103,13 +103,13 @@ func getValueScore(consecutiveCount int, isOpen bool) int {
 	}
 
 	if consecutiveCount == 2 {
-		return oneInARow
-	} else if consecutiveCount == 3 {
 		return twoInARow
-	} else if consecutiveCount == 4 {
+	} else if consecutiveCount == 3 {
 		return threeInARow
-	} else if consecutiveCount >= 5 {
+	} else if consecutiveCount == 4 {
 		return fourInARow
+	} else if consecutiveCount >= 5 {
+		return fiveInARow
 	}
 
 	return 0
