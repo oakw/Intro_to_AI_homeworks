@@ -1,12 +1,5 @@
 package main
 
-import (
-	"image/color"
-
-	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/ebitenutil"
-)
-
 const (
 	Size     = 16 // TODO: Make dynamic
 	WinLen   = 5
@@ -54,25 +47,6 @@ func (b *Board) ScreenToBoard(x, y int) (int, int) {
 
 func (b *Board) CheckWin(player int) bool {
 	return CheckWinCondition(b.grid, player)
-}
-
-func (b *Board) Draw(screen *ebiten.Image) {
-	// Draw grid
-	for i := 0; i <= Size; i++ {
-		ebitenutil.DrawLine(screen, float64(i*Cell), 0, float64(i*Cell), float64(Size*Cell), color.White)
-		ebitenutil.DrawLine(screen, 0, float64(i*Cell), float64(Size*Cell), float64(i*Cell), color.White)
-	}
-
-	// Draw pieces
-	for i := 0; i < Size; i++ {
-		for j := 0; j < Size; j++ {
-			if b.grid[i][j] == Player {
-				ebitenutil.DrawCircle(screen, float64(j*Cell+Cell/2), float64(i*Cell+Cell/2), 10, color.RGBA{0, 255, 0, 255})
-			} else if b.grid[i][j] == AIPlayer {
-				ebitenutil.DrawCircle(screen, float64(j*Cell+Cell/2), float64(i*Cell+Cell/2), 10, color.RGBA{255, 0, 0, 255})
-			}
-		}
-	}
 }
 
 func (b *Board) evaluate() int {

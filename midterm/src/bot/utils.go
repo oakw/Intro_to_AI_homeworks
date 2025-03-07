@@ -83,7 +83,15 @@ func CheckWinCondition(grid [Size][Size]int, player int) bool {
 
 func checkDirection(grid [Size][Size]int, row, col, dRow, dCol, player int) bool {
 	for k := 0; k < WinLen; k++ {
-		if grid[row+k*dRow][col+k*dCol] != player {
+		newRow := row + k*dRow
+		newCol := col + k*dCol
+
+		// Check bounds
+		if newRow < 0 || newRow >= Size || newCol < 0 || newCol >= Size {
+			return false
+		}
+
+		if grid[newRow][newCol] != player {
 			return false
 		}
 	}

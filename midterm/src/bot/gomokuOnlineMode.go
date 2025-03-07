@@ -1,14 +1,14 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
-	"time"
 	"math/rand"
 	"net/http"
 	"net/http/cookiejar"
-	"bytes"
-	"encoding/json"
+	"time"
 )
 
 type GomokuOnlineClient struct {
@@ -91,4 +91,68 @@ func (client *GomokuOnlineClient) makeMoveAndObserve() GomokuOnlineClient {
 	client.gameState = response[0]
 
 	return *client
+}
+
+
+func RunGomokuOnlineMode(gameManager *GameManager) {
+	client := initGomokuOnlineClient()
+	if client == nil {
+		fmt.Println("Failed to initialize online client")
+		return
+	}
+
+	// Stream initial state if streaming is enabled
+	if gameManager != nil && gameManager.streamEnabled {
+		gameManager.StreamState()
+	}
+
+	for {
+		if client.gameState == -1 {
+			client.gameState = 0
+		} else {
+			client.makeMoveAndObserve()
+		}
+
+		if gameManager.board.MakeMove(client.onlineX, client.onlineY, Player) {
+			// Update streaming info
+			if gameManager != nil && gameManager.streamEnabled {
+				gameManager.lastMoveRow = client.onlineX
+				gameManager.lastMoveCol = client.onlineY
+				gameManager.lastMoveBy = Player
+				gameManager.turn = AIPlayer
+				gameManager.StreamState()
+			}
+
+			if client.gameState > 0 {
+				if gameManager != nil && gameManager.streamEnabled {
+					gameManager.board.gameOver = true
+					if gameManager.board.CheckWin(Player) {
+						gameManager.winner = Player
+					} else {
+						gameManager.winner = AIPlayer
+					}
+					gameManager.StreamState()
+				}
+				break
+			}
+
+			// AI move
+			bestMove := gameManager.ai.NextMove(gameManager.board, 3, -9999, 9999, true)
+			gameManager.board.MakeMove(bestMove.Row, bestMove.Col, AIPlayer)
+
+			// Update streaming info
+			if gameManager.streamEnabled {
+				gameManager.lastMoveRow = bestMove.Row
+				gameManager.lastMoveCol = bestMove.Col
+				gameManager.lastMoveBy = AIPlayer
+				gameManager.turn = Player
+				gameManager.StreamState()
+			}
+
+			client.aiX = bestMove.Row
+			client.aiY = bestMove.Col
+		}
+
+		time.Sleep(100 * time.Millisecond)
+	}
 }
