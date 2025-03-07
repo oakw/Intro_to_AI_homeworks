@@ -6,8 +6,6 @@ import (
 	"io"
 	"net/http"
 	"time"
-
-	"github.com/hajimehoshi/ebiten/v2"
 )
 
 const (
@@ -15,7 +13,8 @@ const (
 	gameOverDelay      = 3 * time.Second       // Time to display final board state
 )
 
-type GameState struct {
+// ServerGameState represents the game state from the server
+type ServerGameState struct {
 	RequestStatus string  `json:"request_status"`
 	GameID        int     `json:"game_id"`
 	GameStatus    string  `json:"game_status"`
@@ -30,15 +29,15 @@ type GameState struct {
 	serverURL     string
 }
 
-func NewGameState(serverURL string) *GameState {
-	return &GameState{
+func NewServerGameState(serverURL string) *ServerGameState {
+	return &ServerGameState{
 		lastRequestAt: time.Now().Add(-minRequestInterval),
 		overloadCount: 0,
 		serverURL:     serverURL,
 	}
 }
 
-func (gs *GameState) waitForRateLimit() {
+func (gs *ServerGameState) waitForRateLimit() {
 	elapsed := time.Since(gs.lastRequestAt)
 	if elapsed < minRequestInterval {
 		time.Sleep(minRequestInterval - elapsed)
@@ -46,7 +45,7 @@ func (gs *GameState) waitForRateLimit() {
 	gs.lastRequestAt = time.Now()
 }
 
-func (gs *GameState) makeRequest(url string) error {
+func (gs *ServerGameState) makeRequest(url string) error {
 	gs.waitForRateLimit()
 
 	resp, err := http.Get(url)
@@ -77,7 +76,7 @@ func (gs *GameState) makeRequest(url string) error {
 	return nil
 }
 
-func (gs *GameState) StartGame(studentID string) error {
+func (gs *ServerGameState) StartGame(studentID string) error {
 	url := fmt.Sprintf("%s/%s/start", gs.serverURL, studentID)
 	err := gs.makeRequest(url)
 	if err != nil {
@@ -88,28 +87,28 @@ func (gs *GameState) StartGame(studentID string) error {
 	return nil
 }
 
-func (gs *GameState) MakeMove(studentID string, x, y int) error {
+func (gs *ServerGameState) MakeMove(studentID string, x, y int) error {
 	url := fmt.Sprintf("%s/%s/%d/%d/%d", gs.serverURL, studentID, gs.GameID, x, y)
 	gs.moveCounter++
 	return gs.makeRequest(url)
 }
 
-func (gs *GameState) IsMyTurn() bool {
+func (gs *ServerGameState) IsMyTurn() bool {
 	if gs.isBotBlack {
 		return gs.Turn == "black"
 	}
 	return gs.Turn == "white"
 }
 
-func (gs *GameState) IsGameOver() bool {
+func (gs *ServerGameState) IsGameOver() bool {
 	return gs.GameStatus != "ONGOING"
 }
 
-func (gs *GameState) ShouldExit() bool {
+func (gs *ServerGameState) ShouldExit() bool {
 	return gs.GameStatus == "LEAVE"
 }
 
-func (gs *GameState) UpdateBoardFromServer(board *Board) {
+func (gs *ServerGameState) UpdateBoardFromServer(board *Board) {
 	// Clear the board
 	for i := 0; i < Size; i++ {
 		for j := 0; j < Size; j++ {
@@ -140,7 +139,7 @@ func (gs *GameState) UpdateBoardFromServer(board *Board) {
 	}
 }
 
-func (gs *GameState) GetWinner() int {
+func (gs *ServerGameState) GetWinner() int {
 	switch gs.GameStatus {
 	case "BLACKWON":
 		if gs.isBotBlack {
@@ -161,25 +160,23 @@ type ProductionModeGame struct {
 	board         *Board
 	ai            *AI
 	studentID     string
-	gameState     *GameState
+	gameState     *ServerGameState
 	needsReset    bool
 	winner        int
 	lastMoves     map[string]bool // Track moves to avoid duplicates in board.moves
 	pollCounter   int
 	gameOverTime  time.Time
 	gameOverState bool
-	headlessMode  bool
 }
 
-func NewProductionModeGame(studentID string, headless bool, serverURL string) *ProductionModeGame {
+func NewProductionModeGame(studentID string, serverURL string) *ProductionModeGame {
 	return &ProductionModeGame{
-		board:        NewBoard(),
-		ai:           NewAI(),
-		studentID:    studentID,
-		gameState:    NewGameState(serverURL),
-		needsReset:   true,
-		lastMoves:    make(map[string]bool),
-		headlessMode: headless,
+		board:      NewBoard(),
+		ai:         NewAI(),
+		studentID:  studentID,
+		gameState:  NewServerGameState(serverURL),
+		needsReset: true,
+		lastMoves:  make(map[string]bool),
 	}
 }
 
@@ -203,7 +200,7 @@ func (g *ProductionModeGame) Update() error {
 		}
 
 		if g.gameState.ShouldExit() {
-			return ebiten.Termination
+			return fmt.Errorf("game should exit")
 		}
 
 		g.board = NewBoard()
@@ -238,21 +235,12 @@ func (g *ProductionModeGame) Update() error {
 		}
 
 		if g.gameState.ShouldExit() {
-			return ebiten.Termination
+			return fmt.Errorf("game should exit")
 		}
 
 	} else {
 		// check for opponent's move by polling the server
-
-		if !g.headlessMode {
-			// in GUI mode every 5th frame is polled
-			g.pollCounter++
-			if g.pollCounter < 5 {
-				return nil
-			}
-			g.pollCounter = 0
-		}
-
+		// poll every time in headless mode
 		err := g.gameState.makeRequest(fmt.Sprintf("%s/%s/%d/state",
 			g.gameState.serverURL, g.studentID, g.gameState.GameID))
 
@@ -262,7 +250,7 @@ func (g *ProductionModeGame) Update() error {
 		}
 
 		if g.gameState.ShouldExit() {
-			return ebiten.Termination
+			return fmt.Errorf("game should exit")
 		}
 	}
 
@@ -306,35 +294,56 @@ func (g *ProductionModeGame) processCurrentBoardState() {
 	}
 }
 
-func (g *ProductionModeGame) Draw(screen *ebiten.Image) {
-	if !g.headlessMode {
-		g.board.Draw(screen)
-	}
-}
-
-func (g *ProductionModeGame) Layout(outsideWidth, outsideHeight int) (int, int) {
-	return Size * Cell, Size * Cell
-}
-
 // RunHeadlessGameLoop runs the game continuously without a GUI
 func (g *ProductionModeGame) RunHeadlessGameLoop() {
 	for {
 		err := g.Update()
-		if err == ebiten.Termination {
+		if err != nil {
 			return
 		}
 	}
 }
 
-func RunProductionMode(studentID string, displayEnabled bool, serverURL string) {
-	game := NewProductionModeGame(studentID, !displayEnabled, serverURL)
+// RunProductionMode runs the production mode game with optional streaming
+func RunProductionMode(studentID string, serverURL string, gameManager *GameManager) {
+	game := NewProductionModeGame(studentID, serverURL)
 
-	if displayEnabled {
-		ebiten.SetWindowSize(Size*Cell, Size*Cell)
-		ebiten.SetWindowTitle(fmt.Sprintf("Gomoku - Production Mode (ID: %s, Server: %s)", studentID, serverURL))
-		ebiten.RunGame(game)
+	// Link game board with game manager for streaming
+	if gameManager != nil && gameManager.streamEnabled {
+		game.board = gameManager.board
+	}
 
-	} else {
-		game.RunHeadlessGameLoop()
+	for {
+		err := game.Update()
+		if err != nil {
+			return
+		}
+
+		if gameManager != nil && gameManager.streamEnabled {
+			gameManager.board = game.board
+			gameManager.winner = game.winner
+
+			if len(game.board.moves) > 0 {
+				lastMove := game.board.moves[len(game.board.moves)-1]
+				gameManager.lastMoveRow = lastMove.Row
+				gameManager.lastMoveCol = lastMove.Col
+
+				// Determine who made the move based on move count
+				if game.gameState.moveCounter%2 == 1 {
+					gameManager.lastMoveBy = AIPlayer
+				} else {
+					gameManager.lastMoveBy = Player
+				}
+			}
+
+			if game.gameState.IsMyTurn() {
+				gameManager.turn = AIPlayer
+			} else {
+				gameManager.turn = Player
+			}
+
+			gameManager.board.gameOver = game.board.gameOver
+			gameManager.StreamState()
+		}
 	}
 }

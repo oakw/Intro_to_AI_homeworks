@@ -3,9 +3,6 @@ package main
 import (
 	"fmt"
 	"time"
-
-	"github.com/hajimehoshi/ebiten/v2"
-	"github.com/hajimehoshi/ebiten/v2/inpututil"
 )
 
 type Game struct {
@@ -33,62 +30,54 @@ func NewGame(mode int) *Game {
 }
 
 func (g *Game) Update() error {
-	// Handle mouse click
+	// Handle based on game mode
 	if g.mode == gomokuOnlineMode {
 		// Online mode
 		g.handleGomokuOnlineMode()
-
 	} else {
-		// Playing against real human
-		g.handleHumanModeCycle()
+		// Playing against real human - handled by external input
 	}
 
 	return nil
 }
 
-func (g *Game) Draw(screen *ebiten.Image) {
-	g.board.Draw(screen)
-
-	if g.board.gameOver {
-		msg := "Player wins!"
-		if g.winner == AIPlayer {
-			msg = "AI wins!"
+// ProcessPlayerMove handles a player move from external input
+func (g *Game) ProcessPlayerMove(row, col int) bool {
+	if g.board.MakeMove(row, col, Player) {
+		if g.board.CheckWin(Player) {
+			g.board.gameOver = true
+			g.winner = Player
+			return true
 		}
-		fmt.Println(msg)
-	}
-}
 
-func (g *Game) Layout(outsideWidth, outsideHeight int) (int, int) {
-	return g.size * 32, g.size * 32
-}
+		// AI response
+		startTime := time.Now()
+		bestMove := g.ai.NextMove(g.board, 3, -9999, 9999, true)
+		elapsedTime := time.Since(startTime).Seconds()
+		fmt.Printf("AI made move: %d, %d, Elapsed time: %f\n", bestMove.Row, bestMove.Col, elapsedTime)
 
-func (g *Game) handleHumanModeCycle() {
-	if inpututil.IsMouseButtonJustPressed(ebiten.MouseButtonLeft) {
-		x, y := ebiten.CursorPosition()
-		row, col := g.board.ScreenToBoard(x, y)
-		if g.board.MakeMove(row, col, Player) {
-			if g.board.CheckWin(Player) {
-				g.board.gameOver = true
-				g.winner = Player
-			} else {
-
-				startTime := time.Now()
-				bestMove := g.ai.NextMove(g.board, 3, -9999, 9999, true)
-				elapsedTime := time.Since(startTime).Seconds()
-				fmt.Printf("AI made move: %d, %d, Elapsed time: %f\n", bestMove.Row, bestMove.Col, elapsedTime)
-
-				g.board.MakeMove(bestMove.Row, bestMove.Col, AIPlayer)
-				if g.board.CheckWin(AIPlayer) {
-					g.board.gameOver = true
-					// Print the winner on the screen
-					g.winner = AIPlayer
-				}
-			}
+		g.board.MakeMove(bestMove.Row, bestMove.Col, AIPlayer)
+		if g.board.CheckWin(AIPlayer) {
+			g.board.gameOver = true
+			g.winner = AIPlayer
 		}
+
+		return true
 	}
+	return false
 }
 
+func (g *Game) GetBoardState() [Size][Size]int {
+	return g.board.grid
+}
 
+func (g *Game) IsGameOver() bool {
+	return g.board.gameOver
+}
+
+func (g *Game) GetWinner() int {
+	return g.winner
+}
 
 func (g *Game) handleGomokuOnlineMode() {
 	if g.gomokuOnlineClient == nil {
@@ -124,10 +113,5 @@ func (g *Game) handleGomokuOnlineMode() {
 		g.board.MakeMove(bestMove.Row, bestMove.Col, AIPlayer)
 		g.gomokuOnlineClient.aiX = bestMove.Row
 		g.gomokuOnlineClient.aiY = bestMove.Col
-
-	} else {
-		// fmt.Println("Invalid move")
-		// time.Sleep(100 * time.Second)
-		// os.Exit(0)
 	}
 }
