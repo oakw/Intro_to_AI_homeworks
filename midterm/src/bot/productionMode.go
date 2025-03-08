@@ -164,7 +164,6 @@ type ProductionModeGame struct {
 	needsReset    bool
 	winner        int
 	lastMoves     map[string]bool // Track moves to avoid duplicates in board.moves
-	pollCounter   int
 	gameOverTime  time.Time
 	gameOverState bool
 }
@@ -241,7 +240,7 @@ func (g *ProductionModeGame) Update() error {
 	} else {
 		// check for opponent's move by polling the server
 		// poll every time in headless mode
-		err := g.gameState.makeRequest(fmt.Sprintf("%s/%s/%d/state",
+		err := g.gameState.makeRequest(fmt.Sprintf("%s/%s/%d",
 			g.gameState.serverURL, g.studentID, g.gameState.GameID))
 
 		if err != nil {

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"time"
 )
 
 // GameState represents the serializable game state used for viewer communication
@@ -20,8 +19,8 @@ type GameState struct {
 	Turn        int             `json:"turn"`
 	Mode        int             `json:"mode"`
 	MoveRequest bool            `json:"moveRequest"`
-	RequestRow  int             `json:"requestRow"`  // Row of requested move
-	RequestCol  int             `json:"requestCol"`  // Column of requested move
+	RequestRow  int             `json:"requestRow"` // Row of requested move
+	RequestCol  int             `json:"requestCol"` // Column of requested move
 }
 
 // GameManager handles the game state and streaming to the viewer
@@ -158,35 +157,4 @@ func (gm *GameManager) ReadMoveFromViewer() (int, int, bool) {
 	}
 
 	return 0, 0, false
-}
-
-
-func RunHeadlessHumanMode(gm *GameManager) {
-	fmt.Println("Running in headless human mode")
-	fmt.Println("Use the viewer application to interact with the game")
-
-	gm.StreamState()
-
-	// In headless mode, we just wait for input from the viewer
-	for {
-		time.Sleep(100 * time.Millisecond)
-
-		// Check for player moves from viewer
-		row, col, moveReceived := gm.ReadMoveFromViewer()
-		if moveReceived && gm.board.MakeMove(row, col, Player) {
-			gm.RecordMove(row, col, Player)
-
-			if gm.board.gameOver {
-				break
-			}
-
-			// AI's turn
-			gm.UpdateTurn(AIPlayer)
-			bestMove := gm.ai.NextMove(gm.board, 3, -9999, 9999, true)
-			if gm.board.MakeMove(bestMove.Row, bestMove.Col, AIPlayer) {
-				gm.RecordMove(bestMove.Row, bestMove.Col, AIPlayer)
-				gm.UpdateTurn(Player)
-			}
-		}
-	}
 }

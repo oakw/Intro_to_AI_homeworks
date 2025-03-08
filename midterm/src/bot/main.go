@@ -18,6 +18,7 @@ type CmdArgs struct {
 	StudentID    string
 	ServerURL    string
 	StreamToFile string
+	AIStarts     bool
 }
 
 func parseArgs() CmdArgs {
@@ -25,6 +26,7 @@ func parseArgs() CmdArgs {
 	idPtr := flag.String("id", "", "Student ID for production mode")
 	serverPtr := flag.String("server", "", "Server base URL (required for production mode)")
 	streamPtr := flag.String("stream", "", "Stream game state to file for external viewing")
+	aiStartsPtr := flag.Bool("ai-starts", false, "AI makes the first move in human mode")
 
 	flag.Parse()
 
@@ -32,6 +34,7 @@ func parseArgs() CmdArgs {
 		Mode:         humanMode,
 		ServerURL:    *serverPtr,
 		StreamToFile: *streamPtr,
+		AIStarts:     *aiStartsPtr,
 	}
 
 	switch *modePtr {
@@ -69,7 +72,6 @@ func main() {
 		gameManager.EnableStreaming(args.StreamToFile)
 	}
 
-	// Set mode in game manager
 	gameManager.mode = args.Mode
 
 	switch args.Mode {
@@ -84,7 +86,11 @@ func main() {
 		RunGomokuOnlineMode(gameManager)
 
 	case humanMode:
-		log.Printf("Starting in human mode\n")
-		RunHumanMode(gameManager)
+		if args.AIStarts {
+			log.Printf("Starting in human mode (AI starts)\n")
+		} else {
+			log.Printf("Starting in human mode (Player starts)\n")
+		}
+		RunHumanMode(gameManager, args.AIStarts)
 	}
 }
