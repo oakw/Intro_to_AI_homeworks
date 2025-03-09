@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"time"
 )
@@ -224,7 +225,31 @@ func (g *ProductionModeGame) Update() error {
 	g.processCurrentBoardState()
 
 	if g.gameState.IsMyTurn() {
-		bestMove := g.ai.NextMove(g.board, 3, -9999, 9999, true)
+		// Calculate time budget for this move
+		// Assuming average game will have 256 moves (128 per player)
+		maxMovesRemaining := 256 - len(g.board.moves)
+		if maxMovesRemaining < 1 {
+			maxMovesRemaining = 1
+		}
+
+		// Calculate time budget for this move (in seconds)
+		moveTimeLimit := g.gameState.TimeRemaining / (float64(maxMovesRemaining) / 2)
+
+		// Adjust depth based on available time
+		searchDepth := 3 // Default depth
+		if moveTimeLimit > 5.0 {
+			searchDepth = 4 // Deeper search if we have time
+		} else if moveTimeLimit < 1.0 {
+			searchDepth = 2 // Quick search if we're short on time
+		}
+
+		// Set the maximum execution time for the minimax search
+		g.ai.SetMaxExecutionTime(moveTimeLimit)
+
+		fmt.Printf("Time remaining: %.2f seconds, moves remaining: ~%d, move time budget: %.2f seconds, depth: %d\n",
+			g.gameState.TimeRemaining, maxMovesRemaining, moveTimeLimit, searchDepth)
+
+		bestMove := g.ai.NextMove(g.board, searchDepth, math.Inf(-1), math.Inf(1), true)
 
 		g.board.MakeMove(bestMove.Row, bestMove.Col, AIPlayer)               // Apply move locally
 		err := g.gameState.MakeMove(g.studentID, bestMove.Col, bestMove.Row) // Apply move to server
