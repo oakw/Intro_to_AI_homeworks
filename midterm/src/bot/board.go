@@ -49,27 +49,6 @@ func (b *Board) CheckWin(player int) bool {
 	return CheckWinCondition(b.grid, player)
 }
 
-func (b *Board) evaluate() int {
-	threatScore, favorableScore := b.getThreatAndFavorScores()
-
-	return favorableScore - threatScore
-}
-
-func (b *Board) evaluatePossibleThreatsAndFavors() (map[Move]int, map[Move]int) {
-	possibleMoves := GenerateMoves(b, AIPlayer)
-
-	threats := make(map[Move]int)
-	favorableMoves := make(map[Move]int)
-
-	for _, move := range possibleMoves {
-		b.grid[move.Row][move.Col] = Player
-		threats[move], favorableMoves[move] = b.getThreatAndFavorScores()
-		b.grid[move.Row][move.Col] = Empty
-	}
-
-	return threats, favorableMoves
-}
-
 func getValueScore(consecutiveCount int, isOpen bool) int {
 	if !isOpen && consecutiveCount < WinLen {
 		// If the sequence is blocked and not already a win, reduce its value

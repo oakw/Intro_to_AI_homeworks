@@ -22,9 +22,9 @@ type CmdArgs struct {
 }
 
 func parseArgs() CmdArgs {
-	modePtr := flag.String("mode", "human", "Game mode: human, online, or production")
+	modePtr := flag.String("mode", "production", "Game mode: human, online, or production")
 	idPtr := flag.String("id", "", "Student ID for production mode")
-	serverPtr := flag.String("server", "", "Server base URL (required for production mode)")
+	serverPtr := flag.String("server", "http://0.0.0.0:55555", "Server base URL (required for production mode)")
 	streamPtr := flag.String("stream", "", "Stream game state to file for external viewing")
 	aiStartsPtr := flag.Bool("ai-starts", false, "AI makes the first move in human mode")
 
