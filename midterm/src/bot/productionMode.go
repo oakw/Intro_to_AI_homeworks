@@ -225,34 +225,24 @@ func (g *ProductionModeGame) Update() error {
 	g.processCurrentBoardState()
 
 	if g.gameState.IsMyTurn() {
-		// Calculate time budget for this move
-		// Assuming average game will have 256 moves (128 per player)
-		maxMovesRemaining := 256 - len(g.board.moves)
-		if maxMovesRemaining < 1 {
-			maxMovesRemaining = 1
-		}
-
-		// Calculate time budget for this move (in seconds)
-		moveTimeLimit := g.gameState.TimeRemaining / (float64(maxMovesRemaining) / 2)
-
-		// Adjust depth based on available time
-		searchDepth := 3 // Default depth
-		if moveTimeLimit > 5.0 {
-			searchDepth = 4 // Deeper search if we have time
-		} else if moveTimeLimit < 1.0 {
-			searchDepth = 2 // Quick search if we're short on time
-		}
+		searchDepth, moveTimeLimit := g.affordableMinMaxContraints()
 
 		// Set the maximum execution time for the minimax search
-		g.ai.SetMaxExecutionTime(moveTimeLimit)
+		// Adjust buffer for network latency based on remaining time
+		bufferFactor := 0.85
+		if g.gameState.TimeRemaining < 30.0 {
+			bufferFactor = 0.75 // More conservative when low on time
+		}
 
-		fmt.Printf("Time remaining: %.2f seconds, moves remaining: ~%d, move time budget: %.2f seconds, depth: %d\n",
-			g.gameState.TimeRemaining, maxMovesRemaining, moveTimeLimit, searchDepth)
+		g.ai.SetMaxExecutionTime(moveTimeLimit * bufferFactor)
+
+		fmt.Printf("Time remaining: %.2f seconds, moves: %d, time budget: %.2f seconds, depth: %d\n",
+			g.gameState.TimeRemaining, len(g.board.moves), moveTimeLimit, searchDepth)
 
 		bestMove := g.ai.NextMove(g.board, searchDepth, math.Inf(-1), math.Inf(1), true)
 
-		g.board.MakeMove(bestMove.Row, bestMove.Col, AIPlayer)               // Apply move locally
-		err := g.gameState.MakeMove(g.studentID, bestMove.Col, bestMove.Row) // Apply move to server
+		g.board.MakeMove(bestMove.Row, bestMove.Col, AIPlayer)
+		err := g.gameState.MakeMove(g.studentID, bestMove.Col, bestMove.Row)
 		if err != nil {
 			g.needsReset = true
 			return nil
@@ -279,6 +269,77 @@ func (g *ProductionModeGame) Update() error {
 	}
 
 	return nil
+}
+
+// since Go doesn't have one for int
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+// Adjust depth and its time limit based on available time and game phase
+func (g *ProductionModeGame) affordableMinMaxContraints() (int, float64) {
+	// Calculate time budget for this move
+	// Assuming average game will have 256 moves (128 per player)
+	maxMovesRemaining := 256 - len(g.board.moves)
+	if maxMovesRemaining < 1 {
+		maxMovesRemaining = 1
+	}
+
+	// Calculate time budget for this move (in seconds)
+	moveTimeLimit := g.gameState.TimeRemaining / (float64(maxMovesRemaining) / 2)
+
+	searchDepth := 3 // Default depth
+	gamePhase := len(g.board.moves)
+
+	if gamePhase < 10 {
+		// Early game - use lower depth to save time for critical middle game
+		if moveTimeLimit > 3.0 {
+			searchDepth = 3
+		} else {
+			searchDepth = 2
+		}
+	} else if gamePhase < 30 {
+		// Mid-game - allocate more time for deep search
+		if moveTimeLimit > 5.0 {
+			searchDepth = 4
+		} else if moveTimeLimit > 2.0 {
+			searchDepth = 3
+		} else {
+			searchDepth = 2
+		}
+	} else if gamePhase < 60 {
+		// Late mid-game - most critical phase, use deeper search
+		if moveTimeLimit > 6.0 {
+			searchDepth = 5
+		} else if moveTimeLimit > 3.0 {
+			searchDepth = 4
+		} else if moveTimeLimit > 1.0 {
+			searchDepth = 3
+		} else {
+			searchDepth = 2
+		}
+	} else {
+		// End game - board is more constrained, deeper search is possible
+		if moveTimeLimit > 4.0 {
+			searchDepth = 5
+		} else if moveTimeLimit > 2.0 {
+			searchDepth = 4
+		} else {
+			searchDepth = 3
+		}
+	}
+
+	// Emergency
+	if g.gameState.TimeRemaining < 10.0 {
+		searchDepth = 2
+	} else if g.gameState.TimeRemaining < 20.0 {
+		searchDepth = min(searchDepth, 3)
+	}
+
+	return searchDepth, moveTimeLimit
 }
 
 func (g *ProductionModeGame) processCurrentBoardState() {

@@ -1,8 +1,10 @@
 package main
 
 import (
+	"math/rand"
 	"fmt"
 	"math"
+	"os"
 	"sort"
 	"time"
 )
@@ -29,14 +31,30 @@ type AI struct {
 	transpositionTable            map[string]TTEntry
 	nodesExplored                 int
 	maxExecutionTimeSeconds       float64
+	offensiveBonus                float64            // Bonus for offensive opportunities
+	patternScores                 map[string]float64 // Store pattern scores
 }
 
 func NewAI() *AI {
-	return &AI{
+	ai := &AI{
 		moveCount:               0,
 		transpositionTable:      make(map[string]TTEntry),
 		maxExecutionTimeSeconds: DEFAULT_MAX_MINIMAX_EXECUTION_SECONDS,
+		offensiveBonus:          1.5, // Prioritize offensive moves 1.5x more than defensive
+		patternScores:           make(map[string]float64),
 	}
+
+	// Initialize pattern scores for offense - higher values for critical patterns
+	ai.patternScores["_XXXX_"] = 10000.0 // Open four (winning)
+	ai.patternScores["XXXX_"] = 1000.0   // Closed four
+	ai.patternScores["_XXXX"] = 1000.0   // Closed four
+	ai.patternScores["_XXX_"] = 800.0    // Open three
+	ai.patternScores["XX_XX"] = 800.0    // Split three
+	ai.patternScores["_XX_X_"] = 300.0   // Potential three
+	ai.patternScores["_X_XX_"] = 300.0   // Potential three
+	ai.patternScores["__XX__"] = 200.0   // Open two
+
+	return ai
 }
 
 // SetMaxExecutionTime allows setting a custom time limit for the minimax search
@@ -51,62 +69,99 @@ func (ai *AI) NextMove(board *Board, depth int, alpha, beta float64, isMaximizin
 	ai.moveCount += 1
 	possibleMoves := GenerateMoves(board, AIPlayer)
 
-	if ai.moveCount == 1 || len(board.moves) == 0 {
-		// First move, play anywhere
-		return possibleMoves[0]
+	if ai.moveCount == 1 || len(board.moves) == 0 && len(possibleMoves) > 5 {
+		// First move, play near the center
+		return possibleMoves[rand.Intn(5 + 1)]
+		
+	} else if len(possibleMoves) < 1 {
+		// No moves
+		fmt.Println("No possible moves")
+		os.Exit(0)
 	}
 
-	threats, favors := board.evaluatePossibleThreatsAndFavors()
+	// Get both defensive threats and favorable opportunities integrated with AI's offensive patterns
+	threats, favors, offensiveScores := ai.evaluateAllPatterns(board, possibleMoves)
 
-	possibleThreatMoves := make([]Move, len(possibleMoves))
-	possibleFavorableMoves := make([]Move, len(possibleMoves))
-	copy(possibleThreatMoves, possibleMoves)
-	copy(possibleFavorableMoves, possibleMoves)
+	defensiveMoves := make([]Move, len(possibleMoves))
+	winningMoves := make([]Move, len(possibleMoves))
+	offensiveMoves := make([]Move, len(possibleMoves))
+
+	copy(defensiveMoves, possibleMoves)
+	copy(winningMoves, possibleMoves)
+	copy(offensiveMoves, possibleMoves)
+
 	fmt.Println("")
 
-	sort.Slice(possibleThreatMoves, func(i, j int) bool {
-		return threats[possibleThreatMoves[i]] > threats[possibleThreatMoves[j]]
+	sort.Slice(defensiveMoves, func(i, j int) bool {
+		return threats[defensiveMoves[i]] > threats[defensiveMoves[j]]
 	})
 
-	sort.Slice(possibleFavorableMoves, func(i, j int) bool {
-		return favors[possibleFavorableMoves[i]] > favors[possibleFavorableMoves[j]]
+	sort.Slice(winningMoves, func(i, j int) bool {
+		return favors[winningMoves[i]] > favors[winningMoves[j]]
 	})
 
-	type PossibleMove struct {
-		move  Move
-		score int
+	sort.Slice(offensiveMoves, func(i, j int) bool {
+		return offensiveScores[offensiveMoves[i]] > offensiveScores[offensiveMoves[j]]
+	})
+
+	if len(defensiveMoves) > 0 {
+		fmt.Println("Top defensive move", defensiveMoves[0], "score", threats[defensiveMoves[0]])
+	}
+	if len(winningMoves) > 0 {
+		fmt.Println("Top winning move", winningMoves[0], "score", favors[winningMoves[0]])
+	}
+	if len(offensiveMoves) > 0 {
+		fmt.Println("Top offensive move", offensiveMoves[0], "score", offensiveScores[offensiveMoves[0]])
 	}
 
-	movesFromEachType := []PossibleMove{}
-
-	fmt.Println("Top threat move", possibleThreatMoves[0], "score", threats[possibleThreatMoves[0]])
-	fmt.Println("Top favorable move", possibleFavorableMoves[0], "score", favors[possibleFavorableMoves[0]])
-
-	if len(possibleFavorableMoves) > 0 {
-		movesFromEachType = append(movesFromEachType, PossibleMove{move: possibleFavorableMoves[0], score: favors[possibleFavorableMoves[0]] + 1})
-
-		if favors[possibleFavorableMoves[0]] >= fiveInARow {
-			fmt.Println("Did favorable move", possibleFavorableMoves[0], "score", favors[possibleFavorableMoves[0]])
-			return possibleFavorableMoves[0]
+	// 1. Look for immediate winning moves
+	for _, move := range possibleMoves {
+		tempBoard := board.Copy()
+		tempBoard.grid[move.Row][move.Col] = AIPlayer
+		if tempBoard.CheckWin(AIPlayer) {
+			fmt.Println("Playing winning move", move)
+			return move
 		}
 	}
 
-	if len(possibleThreatMoves) > 0 {
-		movesFromEachType = append(movesFromEachType, PossibleMove{move: possibleThreatMoves[0], score: threats[possibleThreatMoves[0]]})
-
-		if threats[possibleThreatMoves[0]] >= fiveInARow {
-			fmt.Println("Reverse threat move", possibleThreatMoves[0], "score", threats[possibleThreatMoves[0]])
-			return possibleThreatMoves[0]
+	// 2. Block opponent's immediate winning moves
+	for _, move := range possibleMoves {
+		tempBoard := board.Copy()
+		tempBoard.grid[move.Row][move.Col] = Player
+		if tempBoard.CheckWin(Player) {
+			fmt.Println("Blocking opponent's win", move)
+			return move
 		}
 	}
 
+	// 3. Create a four-in-a-row if available (high chance of winning next move)
+	if len(winningMoves) > 0 && favors[winningMoves[0]] >= fourInARow {
+		fmt.Println("Creating 4-in-a-row", winningMoves[0])
+		return winningMoves[0]
+	}
+
+	// 4. Block opponent's four-in-a-row
+	if len(defensiveMoves) > 0 && threats[defensiveMoves[0]] >= fourInARow {
+		fmt.Println("Blocking opponent's 4-in-a-row", defensiveMoves[0])
+		return defensiveMoves[0]
+	}
+
+	// 5. Create high-scoring offensive pattern (if score is significant)
+	// This looks at our pattern-based offensive score which tends to be larger
+	if len(offensiveMoves) > 0 && offensiveScores[offensiveMoves[0]] >= 800 {
+		fmt.Println("Creating strong offensive pattern", offensiveMoves[0])
+		return offensiveMoves[0]
+	}
+
+	// When heuristics are not immediate, do the minimax with increasing depth
 	newBoard := board.Copy()
 	ai.lastMinimaxExecutionStartTime = time.Now()
 	ai.nodesExplored = 0
 	ai.transpositionTable = make(map[string]TTEntry) // Clear TT for new search
 
 	maxDepth := depth
-	var bestMove Move = possibleMoves[0] // default in case we run out of time
+	var bestMove Move = possibleMoves[0]
+	var bestScore = offensiveScores[offensiveMoves[0]]
 
 	for currentDepth := 2; currentDepth <= maxDepth; currentDepth++ {
 		rootNode := MinimaxNode{board: *newBoard, lastMove: board.moves[len(board.moves)-1], nextMove: Move{-1, -1}, currentTurn: AIPlayer}
@@ -118,22 +173,120 @@ func (ai *AI) NextMove(board *Board, depth int, alpha, beta float64, isMaximizin
 		}
 
 		bestMove = rootNode.nextMove
+		bestScore = int(score)
 		fmt.Printf("Depth %d complete, best move: %v, score: %.2f, nodes: %d\n",
 			currentDepth, bestMove, score, ai.nodesExplored)
 	}
 
-	movesFromEachType = append(movesFromEachType, PossibleMove{move: bestMove, score: int(float64(1))})
-	fmt.Println("Minimax move", bestMove)
-
-	sort.Slice(movesFromEachType, func(i, j int) bool {
-		return movesFromEachType[i].score > movesFromEachType[j].score
-	})
-
-	if movesFromEachType[0].score < threeInARow && len(possibleFavorableMoves) > 0 {
-		return possibleFavorableMoves[0]
+	if bestScore < threeInARow {
+		fmt.Println("No good minmax moves found, playing best offensive move")
+		return offensiveMoves[0]
 	}
 
-	return movesFromEachType[0].move
+	fmt.Println("Minimax move", bestMove, "score", bestScore)
+
+	return bestMove
+}
+
+// board evaluation and pattern recognition in a single pass
+func (ai *AI) evaluateAllPatterns(board *Board, moves []Move) (map[Move]int, map[Move]int, map[Move]int) {
+	threats := make(map[Move]int)
+	favors := make(map[Move]int)
+	offensiveScores := make(map[Move]int)
+
+	for _, move := range moves {
+		tempBoard := board.Copy()
+
+		// Check defensive move (what if opponent plays here)
+		tempBoard.grid[move.Row][move.Col] = Player
+		threatScore, _ := tempBoard.getThreatAndFavorScores()
+		threats[move] = threatScore
+		tempBoard.grid[move.Row][move.Col] = Empty
+
+		// Check favorable move (what if we play here)
+		tempBoard.grid[move.Row][move.Col] = AIPlayer
+		_, favorScore := tempBoard.getThreatAndFavorScores()
+		favors[move] = favorScore
+
+		// Now evaluate offensive patterns and augment with additional pattern recognition
+		offensiveScore := 0
+
+		// Check for patterns in all 8 directions
+		directions := []struct{ dr, dc int }{
+			{-1, 0}, {1, 0}, // vertical
+			{0, -1}, {0, 1}, // horizontal
+			{-1, -1}, {1, 1}, // diagonal \
+			{-1, 1}, {1, -1}, // diagonal /
+		}
+
+		// Track if this move creates multiple threats (fork)
+		threatDirections := 0
+
+		// Check each direction for patterns
+		for d := 0; d < 4; d++ {
+			line := ""
+			// Get cells in both directions for pattern matching
+			for offset := -5; offset <= 5; offset++ {
+				r := move.Row + directions[d*2].dr*offset
+				c := move.Col + directions[d*2].dc*offset
+				if r >= 0 && r < Size && c >= 0 && c < Size {
+					switch tempBoard.grid[r][c] {
+					case AIPlayer:
+						line += "X"
+					case Player:
+						line += "O"
+					case Empty:
+						line += "_"
+					}
+				}
+			}
+
+			// Score patterns in this direction
+			dirScore := 0
+			hasPattern := false
+			for pattern, score := range ai.patternScores {
+				if containsPattern(line, pattern) {
+					dirScore += int(score)
+					hasPattern = true
+
+					// If this is a critical pattern (open 3 or better), count it as a threat direction
+					if score >= 800 {
+						threatDirections++
+					}
+				}
+			}
+
+			if hasPattern {
+				offensiveScore += dirScore
+			}
+		}
+
+		// Special bonus for fork moves (creating threats in multiple directions)
+		if threatDirections >= 2 {
+			offensiveScore = int(float64(offensiveScore) * 2.0)
+		}
+
+		offensiveScores[move] = offensiveScore
+		tempBoard.grid[move.Row][move.Col] = Empty
+	}
+
+	return threats, favors, offensiveScores
+}
+
+func containsPattern(s, pattern string) bool {
+	for i := 0; i <= len(s)-len(pattern); i++ {
+		matched := true
+		for j := 0; j < len(pattern); j++ {
+			if s[i+j] != pattern[j] {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return true
+		}
+	}
+	return false
 }
 
 type MinimaxNode struct {
@@ -170,6 +323,11 @@ func (node *MinimaxNode) generateChildNodes() []MinimaxNode {
 				if r >= 0 && r < Size && c >= 0 && c < Size &&
 					node.board.grid[r][c] != Empty {
 					nearStones++
+
+					// Give extra weight to moves near own stones (offensive bias)
+					if node.board.grid[r][c] == node.currentTurn {
+						nearStones++
+					}
 				}
 			}
 		}
@@ -204,7 +362,42 @@ func (ai *AI) minimax(node *MinimaxNode, depth int, alpha, beta float64) float64
 		return -10000.0 - float64(depth)
 	}
 	if depth == 0 || time.Since(ai.lastMinimaxExecutionStartTime).Seconds() > ai.maxExecutionTimeSeconds {
-		return float64(node.board.evaluate())
+		threatScore, favorScore := node.board.getThreatAndFavorScores()
+		score := favorScore - threatScore
+
+		if node.currentTurn == AIPlayer {
+			centerX, centerY := Size/2, Size/2
+			for r := centerY - 2; r <= centerY+2; r++ {
+				for c := centerX - 2; c <= centerX+2; c++ {
+					if r >= 0 && r < Size && c >= 0 && c < Size && node.board.grid[r][c] == AIPlayer {
+						// Small bonus for pieces controlling center
+						score += 5
+					}
+				}
+			}
+
+			// Bonus for creating connections between existing stones
+			if len(node.board.moves) > 3 {
+				lastMove := node.lastMove
+				nearbyStones := 0
+
+				// Count own stones nearby the last move
+				for dr := -2; dr <= 2; dr++ {
+					for dc := -2; dc <= 2; dc++ {
+						r, c := lastMove.Row+dr, lastMove.Col+dc
+						if r >= 0 && r < Size && c >= 0 && c < Size &&
+							node.board.grid[r][c] == AIPlayer && !(dr == 0 && dc == 0) {
+							nearbyStones++
+						}
+					}
+				}
+
+				// Add bonus for connected stones
+				score += nearbyStones * 10
+			}
+		}
+
+		return float64(score)
 	}
 
 	// Check transposition table
