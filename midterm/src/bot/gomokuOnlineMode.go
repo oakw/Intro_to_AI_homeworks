@@ -137,7 +137,7 @@ func RunGomokuOnlineMode(gameManager *GameManager) {
 			}
 
 			// AI move
-			bestMove := gameManager.ai.NextMove(gameManager.board, 3, -9999, 9999, true)
+			bestMove := gameManager.ai.NextMove(gameManager.board, 3)
 			gameManager.board.MakeMove(bestMove.Row, bestMove.Col, AIPlayer)
 
 			// Update streaming info

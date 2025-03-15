@@ -1,10 +1,10 @@
 package main
 
 const (
-	fiveInARow  = 100 // Winning condition
-	fourInARow  = 50
-	threeInARow = 10
-	twoInARow   = 1
+	twoInARow   = 10
+	threeInARow = 100
+	fourInARow  = 1000
+	fiveInARow  = 10000 // Winning move
 )
 
 type Move struct {
