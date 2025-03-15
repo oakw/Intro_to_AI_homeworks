@@ -138,6 +138,12 @@ func (ai *AI) NextMove(board *Board, depth int) Move {
 		fmt.Println("Top offensive move", offensiveMoves[0], "score", offensiveScores[offensiveMoves[0]])
 	}
 
+	// Eliminate immediate threats first
+	if len(defensiveMoves) > 0 && threats[defensiveMoves[0]] >= fiveInARow {
+		fmt.Println("Blocking opponent's 5-in-a-row", defensiveMoves[0])
+		return defensiveMoves[0]
+	}
+
 	// Create a four-in-a-row if available (high chance of winning next move)
 	if len(winningMoves) > 0 && favors[winningMoves[0]] >= fourInARow {
 		fmt.Println("Creating 4-in-a-row", winningMoves[0])
@@ -145,14 +151,13 @@ func (ai *AI) NextMove(board *Board, depth int) Move {
 	}
 
 	// Block opponent's four-in-a-row - this is critical for defense
-	// Use a secondary check to ensure we don't miss any threats
 	fourInARowBlocks := ai.detectFourInARowThreats(board, possibleMoves)
 	if len(fourInARowBlocks) > 0 {
-		fmt.Println("Blocking opponent's 4-in-a-row (enhanced detection)", fourInARowBlocks[0])
+		fmt.Println("Blocking opponent's 4-in-a-row", fourInARowBlocks[0])
 		return fourInARowBlocks[0]
 	}
 	
-	// Standard 4-in-a-row detection as backup
+	// For the sake of being safe
 	if len(defensiveMoves) > 0 && threats[defensiveMoves[0]] >= fourInARow {
 		fmt.Println("Blocking opponent's 4-in-a-row", defensiveMoves[0])
 		return defensiveMoves[0]
