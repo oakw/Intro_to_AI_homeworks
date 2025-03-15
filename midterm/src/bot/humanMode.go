@@ -96,7 +96,7 @@ func RunHumanMode(gameManager *GameManager, aiStarts bool) {
 			}
 		} else {
 			// AI's turn
-			bestMove := gameManager.ai.NextMove(gameManager.board, 3, -9999, 9999, true)
+			bestMove := gameManager.ai.NextMove(gameManager.board, 3)
 
 			if gameManager.board.MakeMove(bestMove.Row, bestMove.Col, AIPlayer) {
 				if !gameManager.streamEnabled {

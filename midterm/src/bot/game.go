@@ -52,7 +52,7 @@ func (g *Game) ProcessPlayerMove(row, col int) bool {
 
 		// AI response
 		startTime := time.Now()
-		bestMove := g.ai.NextMove(g.board, 3, -9999, 9999, true)
+		bestMove := g.ai.NextMove(g.board, 3)
 		elapsedTime := time.Since(startTime).Seconds()
 		fmt.Printf("AI made move: %d, %d, Elapsed time: %f\n", bestMove.Row, bestMove.Col, elapsedTime)
 
@@ -107,7 +107,7 @@ func (g *Game) handleGomokuOnlineMode() {
 		}
 
 		startTime := time.Now()
-		bestMove := g.ai.NextMove(g.board, 3, -9999, 9999, true)
+		bestMove := g.ai.NextMove(g.board, 3)
 		elapsedTime := time.Since(startTime).Seconds()
 		fmt.Printf("AI made move: %d, %d, Elapsed time: %f\n", bestMove.Row, bestMove.Col, elapsedTime)
 		g.board.MakeMove(bestMove.Row, bestMove.Col, AIPlayer)
