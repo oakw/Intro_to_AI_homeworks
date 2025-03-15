@@ -17,6 +17,7 @@ It implements three modes:
 Running these modes can be visualized with the viewer that uses a file to communicate between the visual and agent part.
 
 Here is an example of a finished game:
+
 ![Finished game in the viewer.](gameplay.png)
 
 The core AI logic can be found in `agent.go`, and is as follows:
